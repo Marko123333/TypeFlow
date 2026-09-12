@@ -2,13 +2,16 @@
 set -e
 
 PROJECT_DIR="$(cd "$(dirname "$0")" && pwd)"
-APP_NAME="LocalSwitcher"
+PRODUCT_NAME="TypeFlow"
+# Local builds use the current product name. The release packager overrides this
+# only while creating the private compatibility payload required by 0.1.11.
+BUNDLE_NAME="${RS_BUNDLE_NAME:-$PRODUCT_NAME.app}"
 # Documents/iCloud can race with codesign by attaching FinderInfo to a freshly
 # created bundle. Local installs can set RS_OUTPUT_DIR to a temporary directory
 # outside File Provider storage; CI and existing callers keep the repo default.
 APP_OUTPUT_DIR="${RS_OUTPUT_DIR:-$PROJECT_DIR}"
 mkdir -p "$APP_OUTPUT_DIR"
-APP_BUNDLE="$APP_OUTPUT_DIR/$APP_NAME.app"
+APP_BUNDLE="$APP_OUTPUT_DIR/$BUNDLE_NAME"
 # version.json живёт в КОРНЕ репозитория (живой фид обновлений) — не переносить!
 # RS_VERSION_JSON переопределяет источник версии (для бета-сборок → version-beta.json).
 VERSION_JSON="${RS_VERSION_JSON:-$PROJECT_DIR/../version.json}"
@@ -25,7 +28,7 @@ if [ -z "$SHORT_VERSION" ]; then
     exit 1
 fi
 
-echo "=== Building $APP_NAME v$SHORT_VERSION (build $BUILD_VERSION) ==="
+echo "=== Building $PRODUCT_NAME v$SHORT_VERSION (build $BUILD_VERSION) ==="
 
 # 1. На локальной M1-машине по умолчанию собираем arm64. Universal SwiftPM
 # требует полный Xcode; включается явно через RS_UNIVERSAL=1.
@@ -48,13 +51,15 @@ echo "→ Creating app bundle..."
 rm -rf "$APP_BUNDLE"
 mkdir -p "$APP_BUNDLE/Contents/MacOS"
 mkdir -p "$APP_BUNDLE/Contents/Resources"
+mkdir -p "$APP_BUNDLE/Contents/Resources/ru.lproj"
+mkdir -p "$APP_BUNDLE/Contents/Resources/en.lproj"
 
 # 3. Копируем бинарник
-cp "$BUILD_DIR/$APP_NAME" "$APP_BUNDLE/Contents/MacOS/$APP_NAME"
+cp "$BUILD_DIR/$PRODUCT_NAME" "$APP_BUNDLE/Contents/MacOS/$PRODUCT_NAME"
 
 # 3a. SwiftPM кладёт ресурсы SwitcherCore в отдельный bundle. Без него
 # словари е/ё будут недоступны в упакованном приложении.
-RESOURCE_BUNDLE="$BUILD_DIR/${APP_NAME}_SwitcherCore.bundle"
+RESOURCE_BUNDLE="$BUILD_DIR/${PRODUCT_NAME}_SwitcherCore.bundle"
 if [ ! -d "$RESOURCE_BUNDLE" ]; then
     echo "ERROR: resource bundle not found: $RESOURCE_BUNDLE"
     exit 1
@@ -62,7 +67,7 @@ fi
 cp -R "$RESOURCE_BUNDLE" "$APP_BUNDLE/Contents/Resources/"
 
 # 3b. Самопроверка архитектуры.
-ARCHS=$(lipo -archs "$APP_BUNDLE/Contents/MacOS/$APP_NAME")
+ARCHS=$(lipo -archs "$APP_BUNDLE/Contents/MacOS/$PRODUCT_NAME")
 for expected in "${EXPECTED_ARCHS[@]}"; do
     if [[ "$ARCHS" != *"$expected"* ]]; then
         echo "ERROR: expected architecture $expected, got: $ARCHS"
@@ -73,6 +78,8 @@ echo "→ Architecture OK: $ARCHS"
 
 # 4. Копируем Info.plist и штампуем версию из version.json
 cp "$PROJECT_DIR/Info.plist" "$APP_BUNDLE/Contents/Info.plist"
+cp "$PROJECT_DIR/InfoPlist.strings" "$APP_BUNDLE/Contents/Resources/ru.lproj/InfoPlist.strings"
+cp "$PROJECT_DIR/InfoPlist.strings" "$APP_BUNDLE/Contents/Resources/en.lproj/InfoPlist.strings"
 /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $SHORT_VERSION" "$APP_BUNDLE/Contents/Info.plist"
 /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $BUILD_VERSION" "$APP_BUNDLE/Contents/Info.plist"
 # Dev-метка (буква) для непубликуемых сборок — пусто для релиза. Показывается в About/меню.
@@ -81,7 +88,7 @@ cp "$PROJECT_DIR/Info.plist" "$APP_BUNDLE/Contents/Info.plist"
 echo "→ Stamped Info.plist: CFBundleShortVersionString=$SHORT_VERSION$DEV_TAG CFBundleVersion=$BUILD_VERSION"
 
 # 5. Копируем иконку
-cp "$PROJECT_DIR/LocalSwitcher.icns" "$APP_BUNDLE/Contents/Resources/LocalSwitcher.icns"
+cp "$PROJECT_DIR/TypeFlow.icns" "$APP_BUNDLE/Contents/Resources/TypeFlow.icns"
 
 # 6. Создаём PkgInfo
 echo -n "APPL????" > "$APP_BUNDLE/Contents/PkgInfo"
@@ -96,7 +103,7 @@ SIGN_ID="${RS_SIGN_ID:--}"
 echo "→ Code signing..."
 codesign --force --deep --sign "$SIGN_ID" \
     --options runtime \
-    --entitlements "$PROJECT_DIR/LocalSwitcher.entitlements" \
+    --entitlements "$PROJECT_DIR/TypeFlow.entitlements" \
     "$APP_BUNDLE"
 # Documents может повторно добавить FinderInfo сразу после подписи. Удаление
 # xattrs не меняет seal, но делает bundle приемлемым для strict-проверки.
@@ -110,3 +117,4 @@ echo "Signed with: $SIGN_ID"
 echo ""
 echo "To install:"
 echo "  cp -R $APP_BUNDLE /Applications/"
+echo "  open /Applications/$BUNDLE_NAME"

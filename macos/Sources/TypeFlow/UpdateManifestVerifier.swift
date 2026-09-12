@@ -184,8 +184,11 @@ enum UpdateManifestVerifier {
               url.scheme == "https",
               url.host?.lowercased() == "github.com"
         else { return false }
-        return url.path == "/Marko123333/LocalSwitcher"
-            || url.path.hasPrefix("/Marko123333/LocalSwitcher/")
+        let acceptedRepositories = ["TypeFlow", "LocalSwitcher"]
+        return acceptedRepositories.contains { repository in
+            url.path == "/Marko123333/\(repository)"
+                || url.path.hasPrefix("/Marko123333/\(repository)/")
+        }
     }
 
     private static func isValidOptionalSHA256(_ value: String?) -> Bool {

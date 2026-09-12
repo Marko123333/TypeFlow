@@ -5,10 +5,10 @@ import Foundation
 @MainActor
 enum UpdateChecker {
     // URL к JSON с информацией о версии (стабильный фид).
-    private static let versionURL = "https://raw.githubusercontent.com/Marko123333/LocalSwitcher/main/version.json"
+    private static let versionURL = "https://raw.githubusercontent.com/Marko123333/TypeFlow/main/version.json"
     // Фид пред-релизов (бет). Читается ТОЛЬКО если включён бета-канал в настройках.
     // Может отсутствовать (404) — тогда бета-клиент просто остаётся на стабильном фиде.
-    private static let betaVersionURL = "https://raw.githubusercontent.com/Marko123333/LocalSwitcher/main/version-beta.json"
+    private static let betaVersionURL = "https://raw.githubusercontent.com/Marko123333/TypeFlow/main/version-beta.json"
 
     private enum FeedResult {
         case success(UpdateManifest)
@@ -343,7 +343,9 @@ enum UpdateChecker {
 
         defer { detachUpdateVolume(at: mountPoint) }   // ветки ошибок; успех чистится явно
 
-        // 4. Принимаем только точное имя бандла и не разрешаем symlink за пределы DMG.
+        // 4. The dedicated updater DMG always uses the legacy physical name so
+        // version 0.1.11 and TypeFlow share one signed update artifact.
+        let currentApp = URL(fileURLWithPath: Bundle.main.bundlePath)
         let appName = "LocalSwitcher.app"
         let sourceApp = mountURL.appendingPathComponent(appName, isDirectory: true)
         let sourceValues = try? sourceApp.resourceValues(forKeys: [.isDirectoryKey, .isSymbolicLinkKey])
@@ -352,12 +354,10 @@ enum UpdateChecker {
         guard sourceValues?.isDirectory == true,
               sourceValues?.isSymbolicLink != true,
               resolvedSource.hasPrefix(resolvedMount) else {
-            rslog("Update: exact non-symlink LocalSwitcher.app not found in mounted DMG")
+            rslog("Update: exact non-symlink \(appName) not found in mounted DMG")
             await showInstallError(L10n.updateInstallFailed)
             return
         }
-
-        let currentApp = URL(fileURLWithPath: Bundle.main.bundlePath)
 
         // 5. Проверяем подпись точным постоянным сертификатом LocalSwitcher. Это не
         //     Developer ID и не нотарификация, но подделать подпись без приватного ключа
@@ -409,7 +409,7 @@ enum UpdateChecker {
             await showInstallError(L10n.updateInstallFailed)
             return
         }
-        let stagedApp = stagingDir.appendingPathComponent(appName)
+        let stagedApp = stagingDir.appendingPathComponent(currentApp.lastPathComponent)
         do {
             try fm.copyItem(at: sourceApp, to: stagedApp)
         } catch {
@@ -504,7 +504,7 @@ enum UpdateChecker {
             .appendingPathComponent("LocalSwitcher", isDirectory: true)
             .appendingPathComponent("UpdateBackups", isDirectory: true)
             .appendingPathComponent("\(currentVersion)-\(UUID().uuidString)", isDirectory: true)
-        let backupApp = backupDirectory.appendingPathComponent("LocalSwitcher.app", isDirectory: true)
+        let backupApp = backupDirectory.appendingPathComponent(currentApp.lastPathComponent, isDirectory: true)
         do {
             try fm.createDirectory(
                 at: backupDirectory,
@@ -547,7 +547,7 @@ enum UpdateChecker {
                 )
                 defer { try? fm.removeItem(at: replacementDirectory) }
                 let replacementApp = replacementDirectory
-                    .appendingPathComponent("LocalSwitcher.app", isDirectory: true)
+                    .appendingPathComponent(currentApp.lastPathComponent, isDirectory: true)
                 try fm.copyItem(at: backupApp, to: replacementApp)
                 guard verifyPinnedSignature(at: replacementApp.path) else {
                     rslog("Update: rollback staging signature verification failed")

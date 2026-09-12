@@ -349,10 +349,9 @@ final class SettingsManager: @unchecked Sendable {
     }
     var alwaysConvertWordsSet: Set<String> { Set(alwaysConvertWords.map { $0.lowercased() }) }
 
-    // MARK: - GitHub coordinates (единственный источник — чтобы при переименовании
-    // репозитория правка была в одном месте)
+    // MARK: - GitHub coordinates
     static let githubOwner = "Marko123333"
-    static let githubRepo = "LocalSwitcher"
+    static let githubRepo = "TypeFlow"
     static var githubURL: String { "https://github.com/\(githubOwner)/\(githubRepo)" }
     /// GitHub does not expose a safe GET-only URL that automatically stars a repo.
     /// Open the project page so the signed-in user can make that explicit choice.
@@ -366,10 +365,15 @@ final class SettingsManager: @unchecked Sendable {
     /// открывает GitHub Issues как фолбэк.
     static let contactEmail = ""
     /// Telegram-чат поддержки (t.me/…). Пусто → пункт меню скрыт. Инвайт-ссылка группы
-    /// обсуждения канала @LocalSwitcher (её можно отозвать в настройках группы — тогда обновить).
+    /// обсуждения канала проекта (её можно отозвать в настройках группы - тогда обновить).
     static let telegramChatURL = ""
+    /// Internal updater payload keeps the legacy basename for 0.1.11. The public
+    /// permanent download remains TypeFlow-macOS-arm64.dmg in README/releases.
+    static func releaseDMGFilename(version: String) -> String {
+        "LocalSwitcher-\(version).dmg"
+    }
     static func releaseDMGURL(version: String) -> String {
-        "\(githubURL)/releases/download/v\(version)/\(githubRepo)-\(version).dmg"
+        "\(githubURL)/releases/download/v\(version)/\(releaseDMGFilename(version: version))"
     }
 
     // MARK: - Login Item

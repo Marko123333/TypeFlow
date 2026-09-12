@@ -28,8 +28,8 @@ func rslog(_ msg: String) {
 
     let line = "\(Date()): \(msg)\n"
     rsLogQueue.async {
-        let logDir = NSHomeDirectory() + "/Library/Logs/LocalSwitcher"
-        let path = logDir + "/localswitcher.log"
+        let logDir = NSHomeDirectory() + "/Library/Logs/TypeFlow"
+        let path = logDir + "/typeflow.log"
 
         // Создаём директорию если нет
         if !FileManager.default.fileExists(atPath: logDir) {

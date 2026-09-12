@@ -14,6 +14,7 @@ private struct ReleaseManifest: Decodable {
     let url: String
     let notes: String?
     let sha256: String
+    let public_sha256: String?
 }
 
 private func fail(_ message: String) -> Never {
@@ -75,10 +76,17 @@ private func sign(_ manifestURL: URL, with identity: SecIdentity) {
           let projectURL = URL(string: manifest.url),
           projectURL.scheme == "https",
           projectURL.host?.lowercased() == "github.com",
-          projectURL.path == "/Marko123333/LocalSwitcher"
-            || projectURL.path.hasPrefix("/Marko123333/LocalSwitcher/"),
+          ["TypeFlow", "LocalSwitcher"].contains(where: { repository in
+              projectURL.path == "/Marko123333/\(repository)"
+                  || projectURL.path.hasPrefix("/Marko123333/\(repository)/")
+          }),
           manifest.notes?.count ?? 0 <= 20_000,
-          manifest.sha256.range(of: "^[0-9a-fA-F]{64}$", options: .regularExpression) != nil
+          manifest.sha256.range(of: "^[0-9a-fA-F]{64}$", options: .regularExpression) != nil,
+          manifest.public_sha256 == nil
+            || manifest.public_sha256?.range(
+                of: "^[0-9a-fA-F]{64}$",
+                options: .regularExpression
+            ) != nil
     else {
         fail("manifest is missing, too large, or invalid JSON: \(manifestURL.path)")
     }

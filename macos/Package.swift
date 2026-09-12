@@ -2,7 +2,7 @@
 import PackageDescription
 
 let package = Package(
-    name: "LocalSwitcher",
+    name: "TypeFlow",
     platforms: [.macOS(.v13)],
     targets: [
         .target(
@@ -11,9 +11,9 @@ let package = Package(
             resources: [.process("Resources")]
         ),
         .executableTarget(
-            name: "LocalSwitcher",
+            name: "TypeFlow",
             dependencies: ["SwitcherCore"],
-            path: "Sources/LocalSwitcher",
+            path: "Sources/TypeFlow",
             linkerSettings: [
                 .linkedFramework("AppKit"),
                 .linkedFramework("Carbon"),
@@ -27,9 +27,9 @@ let package = Package(
             path: "Tests/SwitcherCoreTests"
         ),
         .testTarget(
-            name: "LocalSwitcherTests",
-            dependencies: ["LocalSwitcher"],
-            path: "Tests/LocalSwitcherTests"
+            name: "TypeFlowTests",
+            dependencies: ["TypeFlow"],
+            path: "Tests/TypeFlowTests"
         ),
     ]
 )

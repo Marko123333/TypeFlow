@@ -1,7 +1,7 @@
 import Foundation
 import Security
 import Testing
-@testable import LocalSwitcher
+@testable import TypeFlow
 
 @Suite("Signed update manifest")
 struct UpdateManifestVerifierTests {
@@ -14,6 +14,12 @@ struct UpdateManifestVerifierTests {
         #expect(!UpdateVersion.isNewer("0.1.11", than: "0.1.11"))
         #expect(!UpdateVersion.isNewer("999999999999999999.1", than: "0.1.11"))
         #expect(!UpdateVersion.isNewer("0.1.12", than: "not-a-version"))
+    }
+
+    @Test func releaseUsesStablePlatformFilenameInsideVersionedTag() {
+        #expect(SettingsManager.releaseDMGFilename(version: "0.2.0") == "LocalSwitcher-0.2.0.dmg")
+        #expect(SettingsManager.releaseDMGURL(version: "0.2.0") ==
+            "https://github.com/Marko123333/TypeFlow/releases/download/v0.2.0/LocalSwitcher-0.2.0.dmg")
     }
 
     @Test func repositoryFeedsHaveValidProductionSignatures() throws {
@@ -46,6 +52,26 @@ struct UpdateManifestVerifierTests {
 
         #expect(manifest?.version == "0.1.11")
         #expect(manifest?.sha256 == String(repeating: "a", count: 64))
+    }
+
+    @Test func acceptsCurrentAndLegacyRepositoryURLs() throws {
+        let key = try makeKey()
+        let publicKey = try publicKey(for: key)
+        for url in [
+            "https://github.com/Marko123333/TypeFlow",
+            "https://github.com/Marko123333/LocalSwitcher",
+        ] {
+            let data = manifest(
+                version: "0.2.0",
+                url: url,
+                sha256: String(repeating: "a", count: 64)
+            )
+            #expect(UpdateManifestVerifier.verify(
+                manifestData: data,
+                signatureData: try sign(data, with: key),
+                publicKey: publicKey
+            ) != nil)
+        }
     }
 
     @Test func rejectsTamperedManifest() throws {
@@ -91,11 +117,11 @@ struct UpdateManifestVerifierTests {
         let key = try makeKey()
         let publicKey = try publicKey(for: key)
         let cases = [
-            manifest(version: "../../Applications/Evil", url: "https://github.com/Marko123333/LocalSwitcher", sha256: String(repeating: "a", count: 64)),
-            manifest(version: "999999999999999999.1", url: "https://github.com/Marko123333/LocalSwitcher", sha256: String(repeating: "a", count: 64)),
-            manifest(version: "0.1.11", url: "http://github.com/Marko123333/LocalSwitcher", sha256: String(repeating: "a", count: 64)),
-            manifest(version: "0.1.11", url: "https://evil.example/LocalSwitcher", sha256: String(repeating: "a", count: 64)),
-            manifest(version: "0.1.11", url: "https://github.com/Marko123333/LocalSwitcher", sha256: "not-a-hash"),
+            manifest(version: "../../Applications/Evil", url: "https://github.com/Marko123333/TypeFlow", sha256: String(repeating: "a", count: 64)),
+            manifest(version: "999999999999999999.1", url: "https://github.com/Marko123333/TypeFlow", sha256: String(repeating: "a", count: 64)),
+            manifest(version: "0.1.11", url: "http://github.com/Marko123333/TypeFlow", sha256: String(repeating: "a", count: 64)),
+            manifest(version: "0.1.11", url: "https://evil.example/TypeFlow", sha256: String(repeating: "a", count: 64)),
+            manifest(version: "0.1.11", url: "https://github.com/Marko123333/TypeFlow", sha256: "not-a-hash"),
         ]
 
         for data in cases {
@@ -119,7 +145,7 @@ struct UpdateManifestVerifierTests {
 
         do {
             let destination = FileManager.default.temporaryDirectory
-                .appendingPathComponent("LocalSwitcher-oversize-\(UUID().uuidString)")
+                .appendingPathComponent("TypeFlow-oversize-\(UUID().uuidString)")
             defer { try? FileManager.default.removeItem(at: destination) }
             _ = try await limiter.download(
                 for: URLRequest(url: url),
@@ -165,7 +191,7 @@ struct UpdateManifestVerifierTests {
     private func validManifest() -> Data {
         manifest(
             version: "0.1.11",
-            url: "https://github.com/Marko123333/LocalSwitcher/releases/tag/v0.1.11",
+            url: "https://github.com/Marko123333/TypeFlow/releases/tag/v0.1.11",
             sha256: String(repeating: "a", count: 64)
         )
     }

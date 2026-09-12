@@ -1,6 +1,6 @@
 # Security and privacy
 
-LocalSwitcher requires macOS Input Monitoring and Accessibility because it
+TypeFlow requires macOS Input Monitoring and Accessibility because it
 observes keyboard events and replaces text in the focused application.
 
 The application:

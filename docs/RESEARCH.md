@@ -25,7 +25,7 @@
 - [История обновлений Caramba](https://caramba-switcher.com/update/)
 
 Открытого исходного кода Caramba Switcher в ходе поиска не найдено. Поэтому
-LocalSwitcher является clean-room реализацией функций по публичному описанию.
+TypeFlow является clean-room реализацией функций по публичному описанию.
 
 ## Открытые проекты
 

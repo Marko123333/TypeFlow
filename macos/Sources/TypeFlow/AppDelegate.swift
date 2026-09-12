@@ -223,6 +223,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     /// Подтверждение при ручной проверке, когда все разрешения уже выданы
     private func showPermissionsOKAlert() {
+        NSApp.activate(ignoringOtherApps: true)
         let alert = NSAlert()
         alert.alertStyle = .informational
         alert.messageText = L10n.permissionsOkTitle
@@ -233,6 +234,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     /// Уведомление о сбросе разрешений после обновления
     private func showPermissionsResetAlert() {
+        NSApp.activate(ignoringOtherApps: true)
         let alert = NSAlert()
         alert.alertStyle = .informational
         alert.messageText = L10n.wizardPermissionsResetTitle
@@ -246,6 +248,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     private func showStep_Accessibility() {
+        guard confirmPermissionStep(
+            title: L10n.wizardAccessibilityTitle,
+            text: L10n.wizardAccessibilityText
+        ) else {
+            rslog("Accessibility request postponed by user")
+            return
+        }
+
         // AXIsProcessTrustedWithOptions с prompt=true показывает системный диалог
         // и добавляет программу в список Accessibility автоматически
         let options = ["AXTrustedCheckOptionPrompt" as CFString: true as CFBoolean] as CFDictionary
@@ -278,6 +288,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             return
         }
 
+        guard confirmPermissionStep(
+            title: L10n.wizardInputMonitoringTitle,
+            text: L10n.wizardInputMonitoringText
+        ) else {
+            rslog("Input Monitoring request postponed by user")
+            return
+        }
+
         rslog("Requesting access...")
         CGRequestListenEventAccess()
 
@@ -294,6 +312,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 }
             }
         }
+    }
+
+    /// LSUIElement-приложение не имеет обычного окна или Dock-иконки. Поэтому перед
+    /// системным запросом явно объясняем следующий шаг и активируем приложение, иначе
+    /// первый запуск выглядит как будто после открытия ничего не произошло.
+    private func confirmPermissionStep(title: String, text: String) -> Bool {
+        NSApp.activate(ignoringOtherApps: true)
+        let alert = NSAlert()
+        alert.alertStyle = .informational
+        alert.messageText = title
+        alert.informativeText = text
+        alert.addButton(withTitle: L10n.wizardOpenSettings)
+        alert.addButton(withTitle: L10n.wizardLater)
+        return alert.runModal() == .alertFirstButtonReturn
     }
 
     private func restartApp() {
@@ -848,7 +880,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         // Строка версии (с dev-меткой для непубликуемых сборок) — чтобы было видно, какой билд.
         let ver = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "?"
         let devTag = Bundle.main.infoDictionary?["RSDevTag"] as? String ?? ""
-        let verItem = NSMenuItem(title: "LocalSwitcher \(ver)\(devTag)", action: nil, keyEquivalent: "")
+        let verItem = NSMenuItem(title: "TypeFlow \(ver)\(devTag)", action: nil, keyEquivalent: "")
         verItem.isEnabled = false
         menu.addItem(verItem)
         menu.addItem(NSMenuItem.separator())
@@ -1251,7 +1283,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             ("WhatsApp", "whatsapp", "https://wa.me/",                          [("text", "\(text) \(link)")]),
             ("Facebook", "facebook", "https://www.facebook.com/sharer/sharer.php", [("u", link)]),
             ("Reddit",   "reddit",   "https://www.reddit.com/submit",           [("url", link), ("title", text)]),
-            (L10n.menuShareEmail, "sf:envelope", "mailto:",                     [("subject", "LocalSwitcher"), ("body", "\(text) \(link)")]),
+            (L10n.menuShareEmail, "sf:envelope", "mailto:",                     [("subject", "TypeFlow"), ("body", "\(text) \(link)")]),
         ]
         for (title, icon, base, params) in targets {
             guard let shareURL = Self.buildQueryURL(base, params) else { continue }
@@ -1289,8 +1321,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
         let os = ProcessInfo.processInfo.operatingSystemVersionString
         let layouts = LayoutSwitcher.currentAndOppositeLanguage().map { "\($0.current)/\($0.opposite)" } ?? "?"
-        let subject = "LocalSwitcher \(ver) — \(L10n.contactSubject)"
-        let body = "\n\n\n———\nLocalSwitcher \(ver)\nmacOS \(os)\nLayouts: \(layouts)"
+        let subject = "TypeFlow \(ver) — \(L10n.contactSubject)"
+        let body = "\n\n\n———\nTypeFlow \(ver)\nmacOS \(os)\nLayouts: \(layouts)"
         if let s = Self.buildQueryURL("mailto:\(SettingsManager.contactEmail)",
                                       [("subject", subject), ("body", body)]),
            let url = URL(string: s) {

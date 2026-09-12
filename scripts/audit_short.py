@@ -9,7 +9,7 @@ but which is missing from its own list. We check the curated lists against a
 reference of real 2-letter tokens and assert closure (exit 1 on any risk).
 
 Keep SHORT_RU / SHORT_EN below in sync with
-macos/Sources/LocalSwitcher/ShortWords.swift.
+macos/Sources/TypeFlow/ShortWords.swift.
 """
 import sys
 

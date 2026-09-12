@@ -374,7 +374,7 @@ final class SettingsWindowController {
         var y: CGFloat = 310
 
         // Название и версия
-        let titleLabel = NSTextField(labelWithString: "LocalSwitcher")
+        let titleLabel = NSTextField(labelWithString: "TypeFlow")
         titleLabel.font = .boldSystemFont(ofSize: 20)
         titleLabel.frame = NSRect(x: 20, y: y, width: 420, height: 28)
         view.addSubview(titleLabel)
@@ -868,7 +868,7 @@ final class SettingsWindowController {
         let url = URL(fileURLWithPath: path)
         if let service = NSSharingService(named: .composeEmail) {
             service.perform(withItems: [
-                "LocalSwitcher debug log" as NSString,
+                "TypeFlow debug log" as NSString,
                 url
             ])
         } else {
@@ -878,7 +878,7 @@ final class SettingsWindowController {
     }
 
     private func logFilePath() -> String {
-        let logDir = NSHomeDirectory() + "/Library/Logs/LocalSwitcher"
-        return logDir + "/localswitcher.log"
+        let logDir = NSHomeDirectory() + "/Library/Logs/TypeFlow"
+        return logDir + "/typeflow.log"
     }
 }

@@ -1,7 +1,11 @@
 #!/bin/bash
 set -e
 
-APP_NAME="LocalSwitcher"
+PRODUCT_NAME="TypeFlow"
+# Compatibility contract with 0.1.11: the updater only accepts this exact app
+# basename and Bundle ID. CFBundleDisplayName still presents it as TypeFlow.
+COMPAT_APP_NAME="LocalSwitcher.app"
+VISIBLE_APP_NAME="TypeFlow.app"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 cd "$SCRIPT_DIR"   # все относительные пути — от macos/ (аудит: раньше зависели от CWD)
 # --beta: собрать ПРЕД-РЕЛИЗ из version-beta.json, НЕ трогая стабильный фид (version.json)
@@ -41,7 +45,10 @@ fi
 export RS_VERSION_JSON="$SCRIPT_DIR/$VERSION_FILE"
 VERSION=$(/usr/bin/python3 -c "import json;print(json.load(open('$VERSION_FILE'))['version'])")
 BUILD=$(/usr/bin/python3 -c "import json;print(json.load(open('$VERSION_FILE')).get('build','1'))")
-DMG_NAME="${APP_NAME}-${VERSION}.dmg"
+DMG_NAME="${PRODUCT_NAME}-macOS-arm64.dmg"
+# The public DMG contains only TypeFlow.app. The versioned compatibility DMG is
+# used by the signed updater and contains the legacy basename required by 0.1.11.
+COMPAT_DMG_NAME="LocalSwitcher-${VERSION}.dmg"
 # Нотаризация: предпочитаем API-ключ App Store Connect — файл на диске, НЕ зависит
 # от Keychain (keychain-профиль уже дважды пропадал: 2026-07-01 и 2026-07-10).
 # Конфиг ключа: ~/.config/localswitcher/notary.conf (задаёт NOTARY_KEY_FILE,
@@ -61,13 +68,14 @@ else
     NOTARY_ARGS=(--keychain-profile "$NOTARIZE_PROFILE")
     NOTARY_VIA="keychain profile $NOTARIZE_PROFILE"
 fi
-DMG_TEMP="${APP_NAME}-temp.dmg"
-VOL_NAME="${APP_NAME}"
+DMG_TEMP="${PRODUCT_NAME}-temp.dmg"
+VOL_NAME="${PRODUCT_NAME}"
 BACKGROUND="dmg_background.png"
 
 # Сборочный app-бандл держим вне Documents/File Provider: иначе FinderInfo может
 # появиться между codesign и следующей проверкой и сделать релиз невоспроизводимым.
 BUILD_OUTPUT_DIR=$(mktemp -d "${TMPDIR:-/tmp}/localswitcher-release-app.XXXXXX")
+COMPAT_STAGE_DIR=$(mktemp -d "${TMPDIR:-/tmp}/typeflow-update-stage.XXXXXX")
 CERT_TMP_DIR=""
 MOUNT_DIR=""
 cleanup_release_temp() {
@@ -75,6 +83,7 @@ cleanup_release_temp() {
         hdiutil detach "$MOUNT_DIR" -force >/dev/null 2>&1 || true
     fi
     rm -rf "$BUILD_OUTPUT_DIR"
+    rm -rf "$COMPAT_STAGE_DIR"
     if [ -n "$CERT_TMP_DIR" ]; then
         rm -rf "$CERT_TMP_DIR"
     fi
@@ -82,9 +91,26 @@ cleanup_release_temp() {
 }
 trap cleanup_release_temp EXIT
 export RS_OUTPUT_DIR="$BUILD_OUTPUT_DIR"
-APP_PATH="$BUILD_OUTPUT_DIR/${APP_NAME}.app"
+export RS_BUNDLE_NAME="$COMPAT_APP_NAME"
+APP_PATH="$BUILD_OUTPUT_DIR/$COMPAT_APP_NAME"
 
 echo "=== Creating styled DMG ==="
+
+# The source artwork and generated icon files must never drift apart.
+echo "→ Generating current application icon..."
+"$SCRIPT_DIR/generate_icon.swift"
+/usr/bin/iconutil -c icns "$SCRIPT_DIR/TypeFlow.iconset" -o "$SCRIPT_DIR/TypeFlow.icns"
+
+# The background is source-generated on every build. Shipping a stale checked-in
+# PNG previously left the old RuSwitcher title and overlapping instructions in DMG.
+echo "→ Generating current DMG background..."
+"$SCRIPT_DIR/generate_dmg_background.swift" "$SCRIPT_DIR/$BACKGROUND"
+BACKGROUND_WIDTH=$(sips -g pixelWidth "$SCRIPT_DIR/$BACKGROUND" | awk '/pixelWidth/ {print $2}')
+BACKGROUND_HEIGHT=$(sips -g pixelHeight "$SCRIPT_DIR/$BACKGROUND" | awk '/pixelHeight/ {print $2}')
+if [ "$BACKGROUND_WIDTH" != "900" ] || [ "$BACKGROUND_HEIGHT" != "480" ]; then
+    echo "ERROR: DMG background must be 900x480, got ${BACKGROUND_WIDTH}x${BACKGROUND_HEIGHT}." >&2
+    exit 1
+fi
 
 # 00. Fail fast: нотаризационный профиль проверяем ДО многоминутной сборки.
 #     Профиль уже ДВАЖДЫ пропадал из Keychain (2026-07: удалён на живой системе
@@ -152,16 +178,16 @@ fi
 #     Со стейплом на бандле приложение запускается чисто офлайн, без xattr.
 if [ "${SKIP_NOTARIZE:-0}" != "1" ]; then
     echo "→ Notarizing the app bundle..."
-    ditto -c -k --keepParent "$APP_PATH" "${APP_NAME}-app.zip"
-    xcrun notarytool submit "${APP_NAME}-app.zip" "${NOTARY_ARGS[@]}" --wait
-    rm -f "${APP_NAME}-app.zip"
+    ditto -c -k --keepParent "$APP_PATH" "${PRODUCT_NAME}-app.zip"
+    xcrun notarytool submit "${PRODUCT_NAME}-app.zip" "${NOTARY_ARGS[@]}" --wait
+    rm -f "${PRODUCT_NAME}-app.zip"
     echo "→ Stapling the app bundle..."
     xcrun stapler staple "$APP_PATH"
     xcrun stapler validate "$APP_PATH"
 fi
 
 # Clean up
-rm -f "$DMG_NAME" "$DMG_TEMP"
+rm -f "$DMG_NAME" "$COMPAT_DMG_NAME" "$DMG_TEMP"
 
 # 0c. Снимаем «застрявшие» тома с тем же именем. Если /Volumes/LocalSwitcher уже занят,
 #     наш temp-образ примонтируется как «LocalSwitcher 1», а AppleScript-оформление
@@ -191,9 +217,10 @@ if [ "$MOUNT_DIR" != "/Volumes/${VOL_NAME}" ]; then
     exit 1
 fi
 
-# 3. Copy app and create Applications symlink
+# 3. The public installer exposes only TypeFlow.app.
 echo "→ Copying app..."
-cp -R "$APP_PATH" "$MOUNT_DIR/"
+cp -R "$APP_PATH" "$MOUNT_DIR/$VISIBLE_APP_NAME"
+codesign --verify --deep --strict "$MOUNT_DIR/$VISIBLE_APP_NAME"
 ln -sf /Applications "$MOUNT_DIR/Applications"
 
 # 4. Create .background directory and copy background image
@@ -209,7 +236,8 @@ tell application "Finder"
         set current view of container window to icon view
         set toolbar visible of container window to false
         set statusbar visible of container window to false
-        set bounds of container window to {100, 100, 760, 500}
+        -- The extra 30 pt is the Finder title bar; content remains the full 900x480.
+        set bounds of container window to {100, 100, 1000, 610}
 
         set theViewOptions to icon view options of container window
         set arrangement of theViewOptions to not arranged
@@ -217,9 +245,8 @@ tell application "Finder"
         set text size of theViewOptions to 13
         set background picture of theViewOptions to file ".background:background.png"
 
-        -- Position: app icon on left, Applications on right
-        set position of item "$APP_NAME.app" of container window to {170, 210}
-        set position of item "Applications" of container window to {490, 210}
+        set position of item "$VISIBLE_APP_NAME" of container window to {260, 235}
+        set position of item "Applications" of container window to {640, 235}
 
         close
         open
@@ -231,8 +258,8 @@ end tell
 APPLESCRIPT
 
 # 6. Set volume icon
-if [ -f "${APP_NAME}.icns" ]; then
-    cp "${APP_NAME}.icns" "$MOUNT_DIR/.VolumeIcon.icns"
+if [ -f "${PRODUCT_NAME}.icns" ]; then
+    cp "${PRODUCT_NAME}.icns" "$MOUNT_DIR/.VolumeIcon.icns"
     SetFile -c icnC "$MOUNT_DIR/.VolumeIcon.icns" 2>/dev/null || true
     SetFile -a C "$MOUNT_DIR" 2>/dev/null || true
 fi
@@ -261,14 +288,25 @@ echo "→ Compressing..."
 hdiutil convert "$DMG_TEMP" -format UDZO -imagekey zlib-level=9 -o "$DMG_NAME"
 rm -f "$DMG_TEMP"
 
-# 9a. Подписываем САМ .dmg Developer ID. Без этого образ нотаризуется и стейплится, но
+# 9a. Build a separate minimal updater payload. It is never linked from the
+# install instructions; old and new clients fetch it after verifying the signed
+# manifest. Keeping it separate avoids leaking legacy naming into Finder.
+echo "→ Creating compatibility updater DMG..."
+cp -R "$APP_PATH" "$COMPAT_STAGE_DIR/$COMPAT_APP_NAME"
+codesign --verify --deep --strict "$COMPAT_STAGE_DIR/$COMPAT_APP_NAME"
+hdiutil create -volname "${PRODUCT_NAME} Update" -fs HFS+ \
+    -srcfolder "$COMPAT_STAGE_DIR" -format UDZO "$COMPAT_DMG_NAME"
+
+# 9b. Подписываем САМИ .dmg Developer ID. Без этого образ нотаризуется и стейплится, но
 #     `spctl -t install` даёт "no usable signature" — у скачанного образа нет подписи
 #     контейнера, и на части Mac это приводит к недоверию к вынутому из него .app.
 SIGN_ID="${RS_SIGN_ID:--}"
 if [ "${SKIP_NOTARIZE:-0}" != "1" ]; then
-    echo "→ Code signing the DMG (Developer ID + secure timestamp)..."
-    codesign --force --timestamp --sign "$SIGN_ID" "$DMG_NAME"
-    codesign --verify --verbose=2 "$DMG_NAME"
+    echo "→ Code signing the DMGs (Developer ID + secure timestamp)..."
+    for image in "$DMG_NAME" "$COMPAT_DMG_NAME"; do
+        codesign --force --timestamp --sign "$SIGN_ID" "$image"
+        codesign --verify --verbose=2 "$image"
+    done
 fi
 
 # 10. Notarize with Apple (required for Gatekeeper to accept the DMG on end-user Macs).
@@ -276,44 +314,43 @@ fi
 if [ "${SKIP_NOTARIZE:-0}" = "1" ]; then
     echo "→ SKIP_NOTARIZE=1 — skipping notarization (DMG will NOT pass Gatekeeper on other Macs)"
 else
-    echo "→ Submitting to Apple notary service ($NOTARY_VIA)..."
-    xcrun notarytool submit "$DMG_NAME" \
-        "${NOTARY_ARGS[@]}" \
-        --wait
-
-    echo "→ Stapling notarization ticket..."
-    xcrun stapler staple "$DMG_NAME"
-    xcrun stapler validate "$DMG_NAME"
-    # Контрольная проверка: образ должен приниматься как установочный носитель.
-    echo "→ Verifying DMG passes Gatekeeper (install assessment)..."
-    spctl -a -vvv -t install "$DMG_NAME" 2>&1 || echo "WARNING: spctl install assessment did not pass"
+    for image in "$DMG_NAME" "$COMPAT_DMG_NAME"; do
+        echo "→ Submitting $image to Apple notary service ($NOTARY_VIA)..."
+        xcrun notarytool submit "$image" "${NOTARY_ARGS[@]}" --wait
+        xcrun stapler staple "$image"
+        xcrun stapler validate "$image"
+        spctl -a -vvv -t install "$image" 2>&1 || echo "WARNING: spctl install assessment did not pass for $image"
+    done
 fi
 
-# 11. Записываем sha256 обратно в version.json и cask — хэш механически привязан
-#     к реально собранному DMG, а не копируется руками (раньше это расходилось).
+# 11. sha256 is the updater payload bound to old and new clients. public_sha256
+#     separately publishes the digest of the human-facing permanent download.
 DMG_SHA=$(shasum -a 256 "$DMG_NAME" | awk '{print $1}')
+COMPAT_DMG_SHA=$(shasum -a 256 "$COMPAT_DMG_NAME" | awk '{print $1}')
 if [ "$BETA" = "1" ]; then
     # Бета: пишем sha ТОЛЬКО в version-beta.json. Стабильный version.json и cask не трогаем
     # (Homebrew отслеживает стабильные релизы; беты идут только через встроенный апдейтер).
     echo "→ Writing sha256 into $VERSION_FILE (beta feed only; stable version.json/cask untouched)..."
-    /usr/bin/python3 - "$DMG_SHA" "$VERSION_FILE" <<'PY'
+    /usr/bin/python3 - "$COMPAT_DMG_SHA" "$DMG_SHA" "$VERSION_FILE" <<'PY'
 import json, sys
-sha, path = sys.argv[1], sys.argv[2]
+sha, public_sha, path = sys.argv[1], sys.argv[2], sys.argv[3]
 with open(path) as f:
     data = json.load(f)
 data["sha256"] = sha
+data["public_sha256"] = public_sha
 with open(path, "w") as f:
     json.dump(data, f, indent=2)
     f.write("\n")
 PY
 else
     echo "→ Writing sha256 into version.json..."
-    /usr/bin/python3 - "$DMG_SHA" <<'PY'
+    /usr/bin/python3 - "$COMPAT_DMG_SHA" "$DMG_SHA" <<'PY'
 import json, sys
-sha = sys.argv[1]
+sha, public_sha = sys.argv[1], sys.argv[2]
 with open("../version.json") as f:
     data = json.load(f)
 data["sha256"] = sha
+data["public_sha256"] = public_sha
 with open("../version.json", "w") as f:
     json.dump(data, f, indent=2)
     f.write("\n")
@@ -340,5 +377,7 @@ echo "→ Signing update manifest..."
 echo ""
 echo "=== Done! ==="
 echo "DMG: $(pwd)/$DMG_NAME ($(du -h "$DMG_NAME" | cut -f1))"
-echo "SHA256: $DMG_SHA"
-echo "→ Update manifest signed and bound to the DMG hash."
+echo "Compatibility DMG: $(pwd)/$COMPAT_DMG_NAME"
+echo "Public SHA256: $DMG_SHA"
+echo "Updater SHA256: $COMPAT_DMG_SHA"
+echo "→ Update manifest signed and bound to both release artifacts."

@@ -1,4 +1,4 @@
-# LocalSwitcher
+# TypeFlow
 
 Нативный локальный переключатель раскладки для macOS. Цель проекта - добиться
 точности и удобства Caramba Switcher, не копируя закрытый код, название или
@@ -6,6 +6,18 @@
 
 Проект находится в активной разработке. Первая версия ориентирована на пару
 русский + английский и macOS 13+; M1/M2/M3/M4 поддерживаются нативно.
+
+## Скачать и установить
+
+**[Скачать последнюю версию для macOS](https://github.com/Marko123333/TypeFlow/releases/latest/download/TypeFlow-macOS-arm64.dmg)**
+
+1. Откройте скачанный `TypeFlow-macOS-arm64.dmg`.
+2. Перетащите TypeFlow в Applications.
+3. В том же окне дважды нажмите Applications, затем откройте TypeFlow в папке "Программы".
+4. Если macOS заблокирует запуск, откройте "Системные настройки" → "Конфиденциальность и безопасность" и нажмите "Все равно открыть". Кнопка появляется после первой попытки запуска.
+5. Следуйте двум пояснениям приложения для выдачи Accessibility и Input Monitoring.
+
+После запуска иконка появится в строке меню macOS. Обычного окна и значка в Dock у приложения нет.
 
 ## Что уже работает
 
@@ -52,8 +64,12 @@
 cd macos
 swift test
 ./build_app.sh
-open LocalSwitcher.app
+open TypeFlow.app
 ~~~
+
+Локальная сборка и публичный DMG создают `TypeFlow.app`. Отдельный служебный
+образ временно содержит `LocalSwitcher.app` только для совместимости со
+встроенным апдейтером версии 0.1.11.
 
 Локальная сборка по умолчанию подписывается ad-hoc и имеет архитектуру текущего
 Mac. Релизы встроенного канала собираются постоянным сертификатом проекта через
@@ -77,7 +93,7 @@ Mac. Релизы встроенного канала собираются по�
 ## Структура
 
 - macos/Sources/SwitcherCore - тестируемые алгоритмы без UI;
-- macos/Sources/LocalSwitcher - AppKit-приложение и интеграция с macOS;
+- macos/Sources/TypeFlow - AppKit-приложение и интеграция с macOS;
 - macos/Tests - модульные тесты распознавания жестов и коррекции;
 - scripts/build_dictionaries.py - воспроизводимая сборка словарных ресурсов;
 - docs/RESEARCH.md - проверенные функции Caramba и открытые источники;
@@ -87,7 +103,7 @@ Mac. Релизы встроенного канала собираются по�
 
 ## Происхождение и лицензии
 
-LocalSwitcher основан на MIT-проекте
+TypeFlow основан на MIT-проекте
 [rashn/RuSwitcher](https://github.com/rashn/RuSwitcher). История Git и исходное
 уведомление об авторских правах сохранены. Словари е/ё получены из MIT-проекта
 [e2yo/eyo-kernel](https://github.com/e2yo/eyo-kernel). Большие fallback-словари
@@ -97,10 +113,10 @@ LocalSwitcher основан на MIT-проекте
 Исходный код распространяется по MIT License. Подробности находятся в
 [LICENSE](LICENSE) и [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
-LocalSwitcher не связан с Caramba Switcher и не использует его закрытый код.
+TypeFlow не связан с Caramba Switcher и не использует его закрытый код.
 
 ## Поддержка и обратная связь
 
-- [Поставить звезду на GitHub](https://github.com/Marko123333/LocalSwitcher)
-- [Сообщить о проблеме или предложить функцию](https://github.com/Marko123333/LocalSwitcher/issues/new/choose)
+- [Поставить звезду на GitHub](https://github.com/Marko123333/TypeFlow)
+- [Сообщить о проблеме или предложить функцию](https://github.com/Marko123333/TypeFlow/issues/new/choose)
 - [Поддержать развитие проекта](SUPPORT.md)

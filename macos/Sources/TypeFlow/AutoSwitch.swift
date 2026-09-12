@@ -537,7 +537,7 @@ enum AutoSwitchPolicy {
     }
 
     /// Клиенты удалённого рабочего стола: когда такое окно в фокусе, текст живёт
-    /// на ДРУГОЙ машине — наш инстанс должен молчать и уступить удалённому LocalSwitcher.
+    /// на ДРУГОЙ машине — наш инстанс должен молчать и уступить удалённому TypeFlow.
     static let remoteClients: Set<String> = [
         "com.apple.ScreenSharing",   // Apple «Общий экран» / Screen Sharing.app
         "com.apple.RemoteDesktop",   // Apple Remote Desktop

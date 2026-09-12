@@ -1,7 +1,7 @@
 import Foundation
 import Testing
 import SwitcherCore
-@testable import LocalSwitcher
+@testable import TypeFlow
 
 @Suite("Reported layout regressions")
 struct LayoutRegressionTests {
@@ -10,7 +10,7 @@ struct LayoutRegressionTests {
             let url = URL(string: link)
             #expect(url?.scheme == "https")
             #expect(url?.host == "github.com")
-            #expect(link.contains("Marko123333/LocalSwitcher"))
+            #expect(link.contains("Marko123333/TypeFlow"))
         }
     }
 
