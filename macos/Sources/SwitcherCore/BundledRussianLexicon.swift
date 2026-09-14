@@ -13,7 +13,7 @@ public enum BundledRussianLexicon {
     }
 
     private static func load(_ resource: String) -> [String] {
-        guard let url = Bundle.module.url(forResource: resource, withExtension: "txt"),
+        guard let url = SwitcherCoreResources.bundle.url(forResource: resource, withExtension: "txt"),
               let contents = try? String(contentsOf: url, encoding: .utf8) else { return [] }
         return contents.split(whereSeparator: \.isNewline).compactMap { row -> String? in
             guard !row.hasPrefix("#") else { return nil }

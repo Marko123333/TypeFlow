@@ -65,6 +65,19 @@ if [ ! -d "$RESOURCE_BUNDLE" ]; then
     exit 1
 fi
 cp -R "$RESOURCE_BUNDLE" "$APP_BUNDLE/Contents/Resources/"
+PACKAGED_RESOURCE_BUNDLE="$APP_BUNDLE/Contents/Resources/$(basename "$RESOURCE_BUNDLE")"
+for required_resource in \
+    ru_words.fnv64 \
+    en_words.fnv64 \
+    ru_abbreviations.txt \
+    yo_safe_forms.txt \
+    yo_unsafe_forms.txt; do
+    if [ ! -s "$PACKAGED_RESOURCE_BUNDLE/$required_resource" ]; then
+        echo "ERROR: packaged resource is missing or empty: $required_resource"
+        exit 1
+    fi
+done
+echo "→ Packaged SwitcherCore resources OK"
 
 # 3b. Самопроверка архитектуры.
 ARCHS=$(lipo -archs "$APP_BUNDLE/Contents/MacOS/$PRODUCT_NAME")

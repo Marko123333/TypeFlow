@@ -30,7 +30,7 @@ public enum HighConfidenceLexicon {
     /// absent from general-purpose spelling dictionaries. They are an exact
     /// positive signal, not a replacement for the bundled Russian corpus.
     private static let russian: Set<String> = [
-        "руб", "рус", "рос", "коп", "стр", "шт", "тыс", "млн", "млрд",
+        "руб", "рус", "рос", "коп", "стр", "шт", "тыс", "млн", "млрд", "сыр",
         "мин", "сек", "мес", "тел", "имхо", "пж", "пжл", "спс", "прив", "тд", "еще", "ещё",
         "норм", "бля", "блядь", "блять", "сука", "суки", "сучка", "мудак",
         "мудака", "мудаки", "хуй", "хуя", "хуе", "хуё", "хуи", "хуем",

@@ -46,7 +46,7 @@ private struct HashedWordLexicon: @unchecked Sendable {
     let count: Int
 
     init(resource: String) throws {
-        guard let url = Bundle.module.url(forResource: resource, withExtension: "fnv64") else {
+        guard let url = SwitcherCoreResources.bundle.url(forResource: resource, withExtension: "fnv64") else {
             throw LexiconError.missingResource(resource)
         }
         let mapped = try Data(contentsOf: url, options: [.mappedIfSafe])

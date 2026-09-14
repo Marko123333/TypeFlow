@@ -33,6 +33,24 @@ struct LayoutRegressionTests {
         #expect(decision == .switchToConverted)
     }
 
+    @Test @MainActor func convertsRussianCheeseFromEnglishLayout() {
+        #expect(KeyMapping.convert("csh") == "сыр")
+        #expect(LayoutDetector.decide(
+            typed: "csh",
+            converted: "сыр",
+            currentLang: "en",
+            otherLang: "ru",
+            capsLock: false
+        ) == .switchToConverted)
+        #expect(LayoutDetector.decide(
+            typed: "сыр",
+            converted: "csh",
+            currentLang: "ru",
+            otherLang: "en",
+            capsLock: false
+        ) == .keep)
+    }
+
     @Test @MainActor func detectorUsesBroadCorpusOnlyAsFallback() {
         let target = "colourisation"
         let typed = KeyMapping.convert(target)

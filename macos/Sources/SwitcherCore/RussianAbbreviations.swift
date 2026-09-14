@@ -77,7 +77,7 @@ public enum RussianAbbreviations {
     ]
 
     private static let corpus: Set<String> = {
-        guard let url = Bundle.module.url(
+        guard let url = SwitcherCoreResources.bundle.url(
             forResource: "ru_abbreviations",
             withExtension: "txt"
         ), let contents = try? String(contentsOf: url, encoding: .utf8) else {
