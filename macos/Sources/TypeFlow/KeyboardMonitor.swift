@@ -337,6 +337,14 @@ final class KeyboardMonitor: @unchecked Sendable {
         fullReset()
     }
 
+    func suspendForProtectedInput() {
+        pendingShiftSingle?.cancel()
+        pendingShiftSingle = nil
+        _ = shiftGestures.reset()
+        observedShiftSides.removeAll()
+        resetBuffersOnClick()
+    }
+
     // MARK: - Event Handling
 
     func handleKeyDown(keyCode: UInt16, flags: CGEventFlags, char: Character? = nil) {
@@ -846,6 +854,13 @@ private func keyboardCallback(
     }
 
     let monitor = Unmanaged<KeyboardMonitor>.fromOpaque(userInfo).takeUnretainedValue()
+
+    // Gate before extracting key codes or Unicode, including fields where the
+    // application exposes AXSecureTextField without enabling Secure Input.
+    if PasswordFocus.active {
+        monitor.suspendForProtectedInput()
+        return Unmanaged.passRetained(event)
+    }
 
     if type == .keyDown {
         let keyCode = UInt16(event.getIntegerValueField(.keyboardEventKeycode))

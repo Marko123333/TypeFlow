@@ -160,6 +160,24 @@ public enum ModernRussianLexicon {
             for form in reviewForms { result.insert(prefix + form) }
         }
 
+        // Reviewed lock/unlock jargon: finite forms plus reflexive counterparts.
+        // Do not apply these endings to unrelated stems or broad corpus entries.
+        for stem in ["лоч", "залоч", "разлоч", "перелоч", "анлоч"] {
+            let forms = ["ить", "у", "ишь", "ит", "им", "ите", "ат",
+                         "ил", "ила", "ило", "или", "и"]
+            for ending in forms {
+                let form = stem + ending
+                result.insert(form)
+                result.insert(form + ((ending == "у" || ending == "ите" || ending == "ила" ||
+                                       ending == "ило" || ending == "или" || ending == "и") ? "сь" : "ся"))
+            }
+            result.formUnion([stem + "ив", stem + "ившись"])
+            for ending in ["енный", "енная", "енное", "енные", "енного", "енной", "енных",
+                           "енному", "енным", "енную", "енными", "енном", "ен", "ена", "ено", "ены"] {
+                result.insert(stem + ending)
+            }
+        }
+
         return result
     }()
 
