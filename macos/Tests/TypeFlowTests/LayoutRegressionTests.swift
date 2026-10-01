@@ -152,6 +152,20 @@ struct LayoutRegressionTests {
         #expect(BundledRussianLexicon.makeYoRestorer().restore("еще") == .restored("ещё"))
     }
 
+    @Test @MainActor func convertsZipwpFromRussianLayoutWithoutReversingIt() {
+        #expect(KeyMapping.convert("zipwp") == "яшзцз")
+        #expect(HighConfidenceLexicon.contains("zipwp", language: "en"))
+        #expect(LayoutDetector.decide(
+            typed: "яшзцз", converted: "zipwp",
+            currentLang: "ru", otherLang: "en", capsLock: false
+        ) == .switchToConverted)
+        #expect(LayoutDetector.decide(
+            typed: "zipwp", converted: "яшзцз",
+            currentLang: "en", otherLang: "ru", capsLock: false
+        ) == .keep)
+        #expect(Dict.bestCorrection("zipwp", lang: "en") == nil)
+    }
+
     @Test @MainActor func openingParenthesisAndLeadingHyphenLeaveOnlyWordAtSpace() {
         let keycodes = Dictionary(uniqueKeysWithValues: KeyMapping.keycodeToEN.map { ($0.value, $0.key) })
         for prefix in ["(", "((", "-", "(-", " -", "(-("] {
