@@ -1,9 +1,9 @@
 {
-  "version": "0.2.1",
-  "build": "15",
+  "version": "0.2.2",
+  "build": "16",
   "dev": "",
   "url": "https://github.com/Marko123333/TypeFlow",
-  "notes": "Fixes the TypeFlow 0.2.0 launch crash and restores automatic csh-to-\u0441\u044b\u0440 correction.",
-  "sha256": "785f7777aaf7bc1691f00494a0c7fc5ab4c867bb96c8ab1f4fbbaeec117fd817",
-  "public_sha256": "20f268e34c622d7d046621ac9136f094a8b6e33285b96e714e1581bcaad1a863"
+  "notes": "Locks English in password fields; fixes conversion after opening parentheses and leading hyphens; recognizes Russian lock verb forms and \u044f\u0448\u0437\u0446\u0437 \u2192 zipwp.",
+  "sha256": "31d148945f8b36e27c9d9fbc0049149e349d0ba377d79e0a94e5a05911f372da",
+  "public_sha256": "88ebbc1cacedf73d8c71f72cc6b96745fc540b11e433e8a4e0c128464425ffc7"
 }
