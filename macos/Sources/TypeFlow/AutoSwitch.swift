@@ -442,7 +442,7 @@ enum LayoutDetector {
 enum AutoSwitchPolicy {
     /// Активен ли защищённый ввод (поле пароля, Secure Keyboard Entry в терминале) —
     /// тогда авто-конвертацию НЕ делаем (приватность; пароль не трогаем).
-    static var secureInputActive: Bool { IsSecureEventInputEnabled() }
+    static var secureInputActive: Bool { PasswordFocus.active }
 
     /// Имя приложения, удерживающего защищённый ввод (Word, Terminal, менеджер
     /// паролей, loginwindow при системном запросе пароля и т.п.), или nil если

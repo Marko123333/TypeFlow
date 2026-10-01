@@ -2,21 +2,47 @@ name: macOS CI
 
 on:
   push:
-    paths:
-      - "macos/**"
-      - ".github/workflows/macos-ci.yml"
+    branches:
+      - main
   pull_request:
-    paths:
-      - "macos/**"
-      - ".github/workflows/macos-ci.yml"
+    branches:
+      - main
+  workflow_dispatch:
+
+concurrency:
+  group: macos-ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
 
 jobs:
-  test:
+  validate:
+    name: Tests and package audit
     runs-on: macos-15
+    timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v6
+      - name: Check out repository
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+
       - name: Swift tests
         run: swift test --package-path macos
+
+      - name: Audit layout-conversion collisions
+        run: python3 scripts/audit_short.py
+
+      - name: Validate release scripts
+        run: |
+          bash -n macos/build_app.sh
+          bash -n macos/create_dmg.sh
+
+      - name: Build and verify application bundle
+        env:
+          RS_OUTPUT_DIR: ${{ runner.temp }}/typeflow-ci
+        run: |
+          macos/build_app.sh
+          test -x "$RS_OUTPUT_DIR/TypeFlow.app/Contents/MacOS/TypeFlow"
+          codesign --verify --deep --strict --verbose=2 "$RS_OUTPUT_DIR/TypeFlow.app"
+          bundle_version=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$RS_OUTPUT_DIR/TypeFlow.app/Contents/Info.plist")
+          manifest_version=$(python3 -c 'import json; print(json.load(open("version.json"))["version"])')
+          test "$bundle_version" = "$manifest_version"

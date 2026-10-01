@@ -45,8 +45,16 @@ enum LayoutSwitcher {
         return languageCode(source)
     }
 
+    /// Only enabled English sources are eligible; never fall back to another language.
+    static func enforcePasswordEnglish() {
+        guard currentLanguageCode() != "en",
+              let source = installedLayouts().first(where: { languageCode($0) == "en" }) else { return }
+        select(source)
+    }
+
     /// Переключает на противоположную раскладку (из настроенной пары)
     static func switchToOpposite() {
+        if PasswordFocus.active { enforcePasswordEnglish(); return }
         let current = currentLayoutID()
         let settings = SettingsManager.shared
         let sources = installedLayouts()
@@ -63,6 +71,7 @@ enum LayoutSwitcher {
 
     /// Переключает на конкретную раскладку по точному ID
     static func switchTo(layoutID: String) {
+        if PasswordFocus.active { enforcePasswordEnglish(); return }
         let sources = installedLayouts()
         if let target = sources.first(where: { sourceID($0) == layoutID }) {
             select(target)

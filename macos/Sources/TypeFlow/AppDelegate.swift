@@ -9,6 +9,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private let textConverter = TextConverter()
     private let settingsController = SettingsWindowController()
     private let perAppLayoutManager = PerAppLayoutManager()
+    private let passwordLayoutGuard = PasswordLayoutGuard()
     private var permissionCheckTimer: Timer?
     private var iconRefreshTimer: Timer?
     private var updateCheckTimer: Timer?   // периодическая авто-проверка обновлений, пока приложение работает
@@ -20,6 +21,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var badgeCache: [String: NSImage] = [:]  // монохромные плашки, чтобы не перерисовывать 2с-опросом
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        passwordLayoutGuard.onProtectedFocus = { [weak self] in
+            self?.keyboardMonitor.suspendForProtectedInput()
+        }
+        passwordLayoutGuard.start()
         setupStatusItem()
         setupSettingsCallbacks()
         syncLoginItem()
@@ -1347,6 +1352,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     func applicationWillTerminate(_ notification: Notification) {
+        passwordLayoutGuard.stop()
         // Не теряем буфер обмена в 2-секундном окне отложенного восстановления
         // (актуально и при само-обновлении, которое завершает процесс).
         textConverter.flushPendingClipboardRestore()

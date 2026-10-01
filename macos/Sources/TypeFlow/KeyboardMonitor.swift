@@ -337,6 +337,14 @@ final class KeyboardMonitor: @unchecked Sendable {
         fullReset()
     }
 
+    func suspendForProtectedInput() {
+        pendingShiftSingle?.cancel()
+        pendingShiftSingle = nil
+        _ = shiftGestures.reset()
+        observedShiftSides.removeAll()
+        resetBuffersOnClick()
+    }
+
     // MARK: - Event Handling
 
     func handleKeyDown(keyCode: UInt16, flags: CGEventFlags, char: Character? = nil) {
@@ -434,6 +442,19 @@ final class KeyboardMonitor: @unchecked Sendable {
         // (Cmd+A, Cmd+C, Cmd+X и т.п.) могло изменить выделение — сбрасываем наш буфер.
         let modifiers = flags.intersection([.maskCommand, .maskControl, .maskAlternate])
         if !modifiers.isEmpty {
+            fullReset()
+            return
+        }
+
+        // An opening parenthesis starts a new word even when it touches the
+        // preceding word. A leading hyphen likewise belongs to the text, not
+        // to the word being judged at the next space. Keep both in the field,
+        // but exclude them from the key buffer used for replacement. Do not
+        // treat punctuation keys such as `;`, `[`, or `]` this way: in another
+        // layout they can be actual letters (ж, х, ъ).
+        let openingParenthesis = keyCode == 25 && flags.contains(.maskShift)
+        let leadingHyphen = keyCode == 27 && !flags.contains(.maskShift) && currentWordLength == 0
+        if openingParenthesis || leadingHyphen {
             fullReset()
             return
         }
@@ -846,6 +867,13 @@ private func keyboardCallback(
     }
 
     let monitor = Unmanaged<KeyboardMonitor>.fromOpaque(userInfo).takeUnretainedValue()
+
+    // Gate before extracting key codes or Unicode, including fields where the
+    // application exposes AXSecureTextField without enabling Secure Input.
+    if PasswordFocus.active {
+        monitor.suspendForProtectedInput()
+        return Unmanaged.passRetained(event)
+    }
 
     if type == .keyDown {
         let keyCode = UInt16(event.getIntegerValueField(.keyboardEventKeycode))

@@ -15,7 +15,7 @@ public enum HighConfidenceLexicon {
         "prod", "python", "qa", "react", "redis", "repo", "saas", "sdk",
         "sftp", "sql", "ssh", "ssl", "swift", "tcp", "tls", "toml",
         "tyg", "typescript", "udp", "ui", "uri", "url", "uuid", "ux", "vds",
-        "vpn", "vps", "vue", "wifi", "yaml", "zsh", "deno", "express",
+        "vpn", "vps", "vue", "wifi", "zipwp", "yaml", "zsh", "deno", "express",
         "io", "js", "nest", "net", "next", "nuxt", "socket", "three", "ts",
         "cloudpanel", "coolify", "cpanel", "cyberpanel", "directadmin",
         "dokploy", "hestiacp", "openlitespeed", "plesk", "runcloud",
