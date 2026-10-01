@@ -446,6 +446,19 @@ final class KeyboardMonitor: @unchecked Sendable {
             return
         }
 
+        // An opening parenthesis starts a new word even when it touches the
+        // preceding word. A leading hyphen likewise belongs to the text, not
+        // to the word being judged at the next space. Keep both in the field,
+        // but exclude them from the key buffer used for replacement. Do not
+        // treat punctuation keys such as `;`, `[`, or `]` this way: in another
+        // layout they can be actual letters (ж, х, ъ).
+        let openingParenthesis = keyCode == 25 && flags.contains(.maskShift)
+        let leadingHyphen = keyCode == 27 && !flags.contains(.maskShift) && currentWordLength == 0
+        if openingParenthesis || leadingHyphen {
+            fullReset()
+            return
+        }
+
         if KeyMapping.keycodeToEN[keyCode] != nil {
             let tk = TypedKey(keyCode: keyCode, shift: flags.contains(.maskShift), caps: flags.contains(.maskAlphaShift))
             currentWordKeys.append(tk)

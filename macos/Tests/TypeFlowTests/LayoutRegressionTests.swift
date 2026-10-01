@@ -152,6 +152,79 @@ struct LayoutRegressionTests {
         #expect(BundledRussianLexicon.makeYoRestorer().restore("еще") == .restored("ещё"))
     }
 
+    @Test @MainActor func openingParenthesisAndLeadingHyphenLeaveOnlyWordAtSpace() {
+        let keycodes = Dictionary(uniqueKeysWithValues: KeyMapping.keycodeToEN.map { ($0.value, $0.key) })
+        for prefix in ["(", "((", "-", "(-", " -", "(-("] {
+            let monitor = KeyboardMonitor()
+            for character in prefix {
+                if character == "(" { monitor.handleKeyDown(keyCode: 25, flags: .maskShift) }
+                else if character == "-" { monitor.handleKeyDown(keyCode: 27, flags: []) }
+                else { monitor.handleKeyDown(keyCode: KC.space, flags: []) }
+            }
+            for character in "ghbdtn" {
+                monitor.handleKeyDown(keyCode: keycodes[character]!, flags: [])
+            }
+            monitor.handleKeyDown(keyCode: KC.space, flags: [])
+            #expect(monitor.prevWordKeys.count == 6, "Prefix leaked into word: \(prefix)")
+            #expect(monitor.boundaryCount == 1)
+            let typed = String(monitor.prevWordKeys.compactMap { KeyMapping.keycodeToEN[$0.keyCode] })
+            #expect(typed == "ghbdtn")
+            #expect(LayoutDetector.decide(
+                typed: typed, converted: KeyMapping.convert(typed),
+                currentLang: "en", otherLang: "ru", capsLock: false
+            ) == .switchToConverted)
+        }
+    }
+
+    @Test @MainActor func openingParenthesisAfterAnotherWordStartsFreshWord() {
+        let monitor = KeyboardMonitor()
+        for character in "foo" {
+            let keycode = KeyMapping.keycodeToEN.first { $0.value == character }!.key
+            monitor.handleKeyDown(keyCode: keycode, flags: [])
+        }
+        monitor.handleKeyDown(keyCode: 25, flags: .maskShift)
+        #expect(monitor.currentWordKeys.isEmpty)
+        for character in "ghbdtn" {
+            let keycode = KeyMapping.keycodeToEN.first { $0.value == character }!.key
+            monitor.handleKeyDown(keyCode: keycode, flags: [])
+        }
+        monitor.handleKeyDown(keyCode: KC.space, flags: [])
+        #expect(monitor.prevWordKeys.count == 6)
+    }
+
+    @Test @MainActor func internalHyphenStillBelongsToCompound() {
+        let monitor = KeyboardMonitor()
+        for character in "xnj" {
+            let keycode = KeyMapping.keycodeToEN.first { $0.value == character }!.key
+            monitor.handleKeyDown(keyCode: keycode, flags: [])
+        }
+        monitor.handleKeyDown(keyCode: 27, flags: [])
+        for character in "nj" {
+            let keycode = KeyMapping.keycodeToEN.first { $0.value == character }!.key
+            monitor.handleKeyDown(keyCode: keycode, flags: [])
+        }
+        monitor.handleKeyDown(keyCode: KC.space, flags: [])
+        let typed = String(monitor.prevWordKeys.compactMap { KeyMapping.keycodeToEN[$0.keyCode] })
+        #expect(typed == "xnj-nj")
+        #expect(LayoutDetector.decide(typed: typed, converted: "что-то", currentLang: "en",
+                                      otherLang: "ru", capsLock: false) == .switchToConverted)
+    }
+
+    @Test @MainActor func punctuationKeyThatMapsToRussianLetterRemainsPartOfWord() {
+        let monitor = KeyboardMonitor()
+        monitor.handleKeyDown(keyCode: 27, flags: []) // leading hyphen stays outside
+        monitor.handleKeyDown(keyCode: 41, flags: []) // ; is Russian ж
+        for character in "jgf" {
+            let keycode = KeyMapping.keycodeToEN.first { $0.value == character }!.key
+            monitor.handleKeyDown(keyCode: keycode, flags: [])
+        }
+        monitor.handleKeyDown(keyCode: KC.space, flags: [])
+        #expect(monitor.prevWordKeys.count == 4)
+        let typed = String(monitor.prevWordKeys.compactMap { KeyMapping.keycodeToEN[$0.keyCode] })
+        #expect(typed == ";jgf")
+        #expect(KeyMapping.convert(typed) == "жопа")
+    }
+
     @Test @MainActor func convertsRussianHyphenatedWordsFromEnglishLayout() {
         for target in [
             "что-то", "Что-то", "ЧТО-ТО", "где-то", "из-за", "кто-нибудь",
