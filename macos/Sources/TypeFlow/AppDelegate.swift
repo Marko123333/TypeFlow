@@ -493,13 +493,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             self.textConverter.clearState()
             self.updateStatusIcon()
         }
-        keyboardMonitor.onToggleAutomatic = { [weak self] in
-            guard let self else { return }
-            SettingsManager.shared.autoConvert.toggle()
-            self.settingsController.updateAutoConvertState(SettingsManager.shared.autoConvert)
-            self.rebuildMenu()
-            NSSound(named: SettingsManager.shared.autoConvert ? "Tink" : "Pop")?.play()
-        }
         // issue #29: хоткей смены регистра последнего слова / выделения. Раскладку не трогает,
         // в защищённом поле — пас (приватность), как у триггера.
         keyboardMonitor.onCaseHotkey = { [weak self] in

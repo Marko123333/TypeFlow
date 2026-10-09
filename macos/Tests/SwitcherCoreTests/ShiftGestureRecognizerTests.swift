@@ -38,15 +38,24 @@ struct ShiftGestureRecognizerTests {
         ])
     }
 
-    @Test func bothShiftsToggleAutomaticOnlyOnce() {
+    @Test func bothShiftsDoNotDisableAutomaticCorrection() {
         var recognizer = ShiftGestureRecognizer()
 
         #expect(recognizer.shiftChanged(side: .left, isDown: true, at: 1.00) == [])
-        #expect(recognizer.shiftChanged(side: .right, isDown: true, at: 1.03) == [
-            .toggleAutomatic
-        ])
+        #expect(recognizer.shiftChanged(side: .right, isDown: true, at: 1.03) == [])
         #expect(recognizer.shiftChanged(side: .right, isDown: false, at: 1.10) == [])
         #expect(recognizer.shiftChanged(side: .left, isDown: false, at: 1.12) == [])
+        #expect(recognizer.singleTapDeadlineReached(at: 2.00) == [])
+    }
+
+    @Test func rightShiftTapStillSwitchesLayout() {
+        var recognizer = ShiftGestureRecognizer()
+
+        #expect(recognizer.shiftChanged(side: .right, isDown: true, at: 1.00) == [])
+        #expect(recognizer.shiftChanged(side: .right, isDown: false, at: 1.05) == [
+            .scheduleSingle(deadline: 1.33)
+        ])
+        #expect(recognizer.singleTapDeadlineReached(at: 1.33) == [.switchLayout])
     }
 
     @Test func shiftUsedForCapitalizationDoesNothing() {
