@@ -1,7 +1,7 @@
 import Foundation
 
 /// One physical Shift key. Keeping the side lets the recognizer distinguish a
-/// double tap from the "both Shifts" pause gesture.
+/// double tap from a press of both Shift keys.
 public enum ShiftSide: Hashable, Sendable {
     case left
     case right
@@ -14,14 +14,13 @@ public enum ShiftGestureAction: Equatable, Sendable {
     case cancelScheduledSingle
     case switchLayout
     case convertLastWord
-    case toggleAutomatic
 }
 
-/// Resolves the three Caramba-style gestures sharing the Shift keys:
+/// Resolves Shift gestures without changing the automatic-correction setting:
 ///
 /// - one clean tap: switch the active layout;
 /// - two clean taps: convert the last word/selection;
-/// - both Shift keys together: pause or resume automatic correction.
+/// - both Shift keys together: no action, so an accidental chord cannot disable correction.
 ///
 /// A single tap is kept pending for a short double-tap window. If a normal key
 /// arrives during that window, `nonShiftKeyDown(at:)` emits `.switchLayout`
@@ -130,7 +129,6 @@ public struct ShiftGestureRecognizer: Sendable {
             pendingSingleDeadline = nil
             actions.append(.cancelScheduledSingle)
         }
-        actions.append(.toggleAutomatic)
         return actions
     }
 

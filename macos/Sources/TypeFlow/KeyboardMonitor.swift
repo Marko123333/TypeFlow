@@ -72,7 +72,7 @@ struct TriggerConfig {
     }
 
     /// Один Shift переключает раскладку, двойной исправляет последнее слово,
-    /// оба Shift одновременно включают/выключают автоматическую коррекцию.
+    /// оба Shift одновременно не выполняют действие.
     /// В этом режиме параметры rightOnly/doubleTap у двух старых машин не
     /// применяются: жесты разбирает единый детерминированный распознаватель.
     static var sharedShiftGesturesEnabled: Bool {
@@ -186,8 +186,6 @@ final class KeyboardMonitor: @unchecked Sendable {
     private var caseLastTapTime: Date?
     /// Колбэк смены регистра (issue #29). Ставится из AppDelegate.
     var onCaseHotkey: (() -> Void)?
-    /// Оба Shift: пауза/возобновление автоматической коррекции.
-    var onToggleAutomatic: (() -> Void)?
 
     // Единый распознаватель Shift-жестов. Отдельные trigger/switch машины не
     // могут корректно разрешить один и двойной тап одной и той же клавиши.
@@ -678,9 +676,6 @@ final class KeyboardMonitor: @unchecked Sendable {
                 rslog("shared shift: convert last word")
                 fireConversion()
 
-            case .toggleAutomatic:
-                rslog("shared shift: toggle automatic correction")
-                DispatchQueue.main.async { [weak self] in self?.onToggleAutomatic?() }
             }
         }
     }
