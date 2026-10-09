@@ -1,9 +1,9 @@
 {
-  "version": "0.2.2",
-  "build": "16",
+  "version": "0.2.3",
+  "build": "17",
   "dev": "",
   "url": "https://github.com/Marko123333/TypeFlow",
-  "notes": "Locks English in password fields; fixes conversion after opening parentheses and leading hyphens; recognizes Russian lock verb forms and \u044f\u0448\u0437\u0446\u0437 \u2192 zipwp.",
-  "sha256": "31d148945f8b36e27c9d9fbc0049149e349d0ba377d79e0a94e5a05911f372da",
-  "public_sha256": "88ebbc1cacedf73d8c71f72cc6b96745fc540b11e433e8a4e0c128464425ffc7"
+  "notes": "Prevents Shift keys from accidentally disabling automatic correction. Single Shift still switches layout and double Shift still fixes the last word.",
+  "sha256": "fff83aaf062ce6b43bda8fe4cbfb500b820eaba11636554603291224f2389918",
+  "public_sha256": "dac48f05e32a2ee4fae95b9965f7249a18679e7ef1152290fae0bb5446025174"
 }
