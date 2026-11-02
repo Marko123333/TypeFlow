@@ -32,6 +32,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         // offerLaunchAtLoginIfNeeded выставляет launchAtLoginAsked уже на этом же
         // первом запуске, иначе «Что нового» ложно показалось бы на свежей установке.
         let ranBefore = SettingsManager.shared.launchAtLoginAsked
+        // Warm AppleSpell and mapped dictionaries before enabling the event tap;
+        // a cold first boundary must not wait for XPC startup inside the callback.
+        Dict.warmUp()
         runPermissionWizard()
         showWhatsNewIfNeeded(hasRunBefore: ranBefore)
         showBetaWhatsNewIfNeeded()   // отдельная витрина для бет (текст из бета-фида)
@@ -41,11 +44,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         // уважает настройку «Автоматически проверять обновления» (её можно снять, чтобы отключить).
         updateCheckTimer = Timer.scheduledTimer(withTimeInterval: 6 * 3600, repeats: true) { _ in
             Task { @MainActor in UpdateChecker.checkPeriodic() }
-        }
-        // Прогрев NSSpellChecker: первый чек поднимает XPC AppleSpell (сотни мс на main) —
-        // прогреваем в тихую паузу после старта, а не на первом пробеле пользователя.
-        DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
-            Task { @MainActor in Dict.warmUp() }
         }
         // 140k+ ё-forms are parsed off the event-tap/main thread so startup and
         // the first keystrokes never stall on dictionary construction.
@@ -467,8 +465,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
 
         monitoringActive = true
-        keyboardMonitor.onWordBoundary = { [weak self] in
-            self?.handleAutoConvert()
+        keyboardMonitor.onWordBoundary = { [weak self] boundary in
+            self?.handleAutoConvert(boundary)
         }
         keyboardMonitor.onRejectLastConversion = { [weak self] in
             self?.rejectLastAutoConversion()
@@ -541,14 +539,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             startPerAppLayout()
         }
 
-        // Предлагаем автозагрузку при первом запуске. Автокоррекция включена
-        // по умолчанию и приостанавливается одновременным нажатием обоих Shift.
+        // Предлагаем автозагрузку при первом запуске.
         offerLaunchAtLoginIfNeeded()
     }
 
     /// Авто-конвертация на границе слова: детект неправильной раскладки → конверт + смена.
     /// Точность-first: при любой неуверенности ничего не делаем. Ручной триггер не трогаем.
-    private func handleAutoConvert() {
+    private func handleAutoConvert(_ boundary: WordBoundary) {
         rslog("auto: fired")
         guard SettingsManager.shared.autoSwitchEnabled else { rslog("auto: bail master-off"); return }
         guard SettingsManager.shared.autoConvert else { rslog("auto: bail flag-off"); return }
@@ -558,14 +555,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         // «не той раскладке» переключаем СВОЮ раскладку (конверсию делает инстанс на той стороне).
         let deferToRemote = SettingsManager.shared.remoteDesktopMode && AutoSwitchPolicy.isRemoteDesktopClient(frontID)
         if AutoSwitchPolicy.isDeniedApp(frontID) { rslog("auto: bail denied-app \(frontID ?? "?")"); return }
-        if let captured = keyboardMonitor.prevWordBundleID, captured != frontID {
+        if let captured = boundary.bundleID, captured != frontID {
             rslog("auto: bail focus-changed"); return  // фокус уехал между пробелом и сейчас
         }
 
-        let allKeys = keyboardMonitor.prevWordKeys
-        let bc = keyboardMonitor.boundaryCount
+        let allKeys = boundary.keys
         guard !allKeys.isEmpty else { rslog("auto: bail empty-keys"); return }  // курсор уехал — небезопасно
         guard let fullPair = DynamicKeyMapping.convertKeys(allKeys) else { rslog("auto: bail convertKeys-nil"); return }
+        guard fullPair.original.count == allKeys.count else {
+            rslog("auto: bail non-character-key-buffer")
+            return
+        }
         if sessionCorrectionSuppression.consume(fullPair.original) {
             rslog("auto: bail one-shot-user-override")
             return
@@ -629,20 +629,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 rslog("auto: polish deferred to remote instance")
                 return
             }
-            if SpotlightAX.isActive() {
-                if suffix.isEmpty,
-                   textConverter.convertSpotlightWord(converted: polishedOriginal, boundaryCount: bc) {
-                    keyboardMonitor.markConverted()
-                    recordAutoConversion(pair.original)
-                }
-                return
-            }
-            if textConverter.replace(
-                wordKeys: [],
-                prevWordKeys: keys,
-                boundaryCount: bc,
-                with: polishedOriginal,
-                passthroughSuffix: suffix
+            if replaceAutomaticWord(
+                pair.original, with: polishedOriginal, suffix: suffix, boundary: boundary
             ) {
                 keyboardMonitor.markConverted()
                 recordAutoConversion(pair.original)
@@ -697,21 +685,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                !AutoSwitchPolicy.isDeniedWord(pair.original, targetSpelling),
                !deferToRemote {
                 let polishedTarget = polishWord(targetSpelling, language: langs.opposite)
-                if SpotlightAX.isActive() {
-                    if textConverter.convertSpotlightWord(converted: polishedTarget, boundaryCount: bc) {
-                        keyboardMonitor.markConverted()
-                        LayoutSwitcher.switchToOpposite()
-                        updateStatusIcon()
-                        recordAutoConversion(pair.original, alternatives: [pair.converted])
-                    }
-                    return
-                }
-                if textConverter.replace(
-                    wordKeys: [],
-                    prevWordKeys: keys,
-                    boundaryCount: bc,
-                    with: polishedTarget,
-                    passthroughSuffix: ""
+                if replaceAutomaticWord(
+                    pair.original, with: polishedTarget, suffix: "", boundary: boundary
                 ) {
                     keyboardMonitor.markConverted()
                     LayoutSwitcher.switchToOpposite()
@@ -725,20 +700,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                   !AutoSwitchPolicy.isDeniedWord(pair.original, spelling),
                   !deferToRemote else { return }
             let polishedSpelling = polishWord(spelling, language: langs.current)
-            if SpotlightAX.isActive() {
-                if suffix.isEmpty,
-                   textConverter.convertSpotlightWord(converted: polishedSpelling, boundaryCount: bc) {
-                    keyboardMonitor.markConverted()
-                    recordAutoConversion(pair.original)
-                }
-                return
-            }
-            if textConverter.replace(
-                wordKeys: [],
-                prevWordKeys: keys,
-                boundaryCount: bc,
-                with: polishedSpelling,
-                passthroughSuffix: suffix
+            if replaceAutomaticWord(
+                pair.original, with: polishedSpelling, suffix: suffix, boundary: boundary
             ) {
                 keyboardMonitor.markConverted()
                 recordAutoConversion(pair.original)
@@ -755,31 +718,39 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             return
         }
 
-        // issue #16 (авто): в Spotlight стирание по счётчику оставляет лишнюю букву (серое
-        // автодополнение ест Backspace). Решение по буферу уже принято верно — меняем только
-        // способ замены: по-словное выделение (Shift+Option+Left) + печать поверх, без
-        // Backspace. Суффикс-случай (#15) в Spotlight редок и фиддловат — его не трогаем.
         let polishedConverted = polishWord(pair.converted, language: langs.opposite)
-        if SpotlightAX.isActive() {
-            if suffix.isEmpty,
-               textConverter.convertSpotlightWord(converted: polishedConverted, boundaryCount: bc) {
-                keyboardMonitor.markConverted()
-                LayoutSwitcher.switchToOpposite()
-                updateStatusIcon()
-                recordAutoConversion(pair.original, alternatives: [pair.converted])
-            }
-            return   // Spotlight: обычный count-путь неприменим
-        }
-
-        rslog("auto: convert \(keys.count) keys (+\(suffix.count) punct, +\(bc) sp)")
-        if textConverter.convert(wordKeys: [], prevWordKeys: keys, boundaryCount: bc,
-                                 passthroughSuffix: suffix,
-                                 replacementOverride: polishedConverted) {
+        if replaceAutomaticWord(
+            pair.original, with: polishedConverted, suffix: suffix, boundary: boundary
+        ) {
             keyboardMonitor.markConverted()
             LayoutSwitcher.switchToOpposite()
             updateStatusIcon()
             recordAutoConversion(pair.original, alternatives: [pair.converted])
         }
+    }
+
+    private func replaceAutomaticWord(
+        _ original: String,
+        with replacement: String,
+        suffix: String,
+        boundary: WordBoundary
+    ) -> Bool {
+        guard let postEvent = boundary.postEvent else { return false }
+        guard ProcessInfo.processInfo.systemUptime <= boundary.deadline else {
+            rslog("auto: bail slow-boundary-decision")
+            return false
+        }
+        // Recheck focus metadata immediately before posting any destructive event.
+        guard !PasswordFocus.active,
+              boundary.bundleID == NSWorkspace.shared.frontmostApplication?.bundleIdentifier else {
+            rslog("auto: bail replacement-focus-changed")
+            return false
+        }
+        let selectWord = SpotlightAX.isActive()
+        return textConverter.replaceAtWordBoundary(
+            original: original, with: replacement, passthroughSuffix: suffix,
+            selectWord: selectWord, deadline: boundary.deadline, postEvent: postEvent
+        )
     }
 
     /// Applies only high-confidence corrections. This is deliberately not a

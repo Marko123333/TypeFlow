@@ -35,6 +35,15 @@ RS_OUTPUT_DIR="$(mktemp -d)" macos/build_app.sh
 Never install the result or modify the user's Accessibility or Input Monitoring
 permissions unless the user explicitly asks for those actions.
 
+## Input testing
+
+- Never run automated typing tests through system-wide event posting in the
+  user's desktop session or open applications, including chats.
+- Use in-process text fixtures and unshown text-view objects for automated tests.
+  Full system-input tests require an isolated VM or separate login session.
+- Do not temporarily replace the installed app with a diagnostic binary to reuse
+  its Accessibility or Input Monitoring permissions.
+
 ## Code Review Rules
 
 ### Privacy and keyboard-event safety

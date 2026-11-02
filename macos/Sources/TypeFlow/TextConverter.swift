@@ -88,6 +88,34 @@ final class TextConverter {
 
     // MARK: - Public API
 
+    /// Posts an automatic edit inside the boundary callback. CGEventTapPostEvent
+    /// orders this complete batch before the physical space and subsequent input;
+    /// no asynchronous worker or sleep may be introduced in this path.
+    func replaceAtWordBoundary(
+        original: String,
+        with replacement: String,
+        passthroughSuffix: String = "",
+        selectWord: Bool = false,
+        deadline: TimeInterval,
+        postEvent: (CGEvent) -> Void
+    ) -> Bool {
+        guard !isConverting,
+              let events = BoundaryReplacement(
+                original: original, replacement: replacement,
+                suffix: passthroughSuffix, selectWord: selectWord
+              ).makeEvents(),
+              ProcessInfo.processInfo.systemUptime <= deadline else { return false }
+
+        isConverting = true
+        defer { isConverting = false }
+        for event in events { postEvent(event) }
+        lastOriginal = original + passthroughSuffix + " "
+        lastConverted = Self.normalizedForInsert(replacement + passthroughSuffix) + " "
+        lastWasBuffer = !selectWord
+        rslog("auto: ordered replacement (\(original.count) keys)")
+        return true
+    }
+
     /// Движок перепечатки: стираем набранное и впечатываем конвертированное через
     /// юникод-вставку — без буфера обмена и без выделения (работает в Atom/Electron).
     /// Падает на clipboard-движок, если буфера нет (текст выделен мышью) или
