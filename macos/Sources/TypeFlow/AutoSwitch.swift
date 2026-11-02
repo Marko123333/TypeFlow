@@ -37,11 +37,14 @@ enum Dict {
 
     /// Прогрев: первое обращение к NSSpellChecker поднимает XPC-процесс AppleSpell
     /// (сотни мс на main) — без прогрева этот фриз пришёлся бы на первый пробел
-    /// пользователя после запуска. Вызывается отложенно из applicationDidFinishLaunching.
+    /// пользователя после запуска. Вызывается до включения event tap.
     @MainActor static func warmUp() {
         _ = languages()
-        _ = isValidWord("тест", lang: "ru")
-        _ = isValidWord("test", lang: "en")
+        for (word, language) in [("тест", "ru"), ("test", "en")] {
+            _ = checker.checkSpelling(of: word, startingAt: 0, language: language,
+                                      wrap: false, inSpellDocumentWithTag: 0, wordCount: nil)
+            _ = BundledLexicon.supports(language: language)
+        }
     }
 
     /// true — слово есть в словаре языка (орфография корректна).

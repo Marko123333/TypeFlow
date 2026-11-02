@@ -124,6 +124,15 @@ struct TriggerConfig {
     }
 }
 
+/// A boundary is resolved while its physical space is still inside the event
+/// tap. The emitter posts the entire edit before that space and the next key.
+struct WordBoundary {
+    let keys: [TypedKey]
+    let bundleID: String?
+    let deadline: TimeInterval
+    let postEvent: ((CGEvent) -> Void)?
+}
+
 final class KeyboardMonitor: @unchecked Sendable {
     fileprivate var eventTap: CFMachPort?
     private var runLoopSource: CFRunLoopSource?
@@ -159,8 +168,8 @@ final class KeyboardMonitor: @unchecked Sendable {
 
     private var onAltTap: (() -> Void)?
     private var onAltReconvert: (() -> Void)?
-    /// Авто-конвертация: вызывается (async) на границе слова, когда включён autoConvert.
-    var onWordBoundary: (() -> Void)?
+    /// Synchronous: the space must not leave the tap before the edit is posted.
+    var onWordBoundary: ((WordBoundary) -> Void)?
     /// Первый Backspace/Cmd+Z сразу после нашей автозамены означает, что пользователь
     /// отверг исправление. AppDelegate временно запомнит исходное написание.
     var onRejectLastConversion: (() -> Void)?
@@ -230,9 +239,9 @@ final class KeyboardMonitor: @unchecked Sendable {
             | (1 << CGEventType.leftMouseDown.rawValue)
             | (1 << CGEventType.rightMouseDown.rawValue)
 
-        // Caps Lock требует активного tap (consume), чтобы подавить переключение
-        // регистра. Для модификаторов оставляем listenOnly — не вмешиваемся в ввод.
-        let options: CGEventTapOptions = triggerConfig.isCapsLock ? .defaultTap : .listenOnly
+        // An active tap keeps the boundary in the stream until a synchronous
+        // replacement has been posted ahead of it with CGEventTapPostEvent.
+        let options: CGEventTapOptions = .defaultTap
 
         // Режим удалённого стола: session-уровень видит проброшенные Screen Sharing
         // нажатия (они инжектятся через CGEventPost, а HID-tap их не видит).
@@ -313,12 +322,13 @@ final class KeyboardMonitor: @unchecked Sendable {
         lineKeys = []
     }
 
-    /// Завершилось слово на пробеле — если включён autoConvert, дёргаем авто-путь
-    /// (async, чтобы не блокировать доставку текущего события).
-    private func fireWordBoundary() {
-        guard SettingsManager.shared.autoConvert else { return }
-        let cb = onWordBoundary
-        DispatchQueue.main.async { cb?() }
+    private func fireWordBoundary(deadline: TimeInterval, postEvent: ((CGEvent) -> Void)?) {
+        onWordBoundary?(WordBoundary(
+            keys: prevWordKeys,
+            bundleID: prevWordBundleID,
+            deadline: deadline,
+            postEvent: postEvent
+        ))
     }
 
     /// Сброс буфера при клике мышью — иначе backspace перепечатки сотрёт не то
@@ -345,7 +355,13 @@ final class KeyboardMonitor: @unchecked Sendable {
 
     // MARK: - Event Handling
 
-    func handleKeyDown(keyCode: UInt16, flags: CGEventFlags, char: Character? = nil) {
+    func handleKeyDown(
+        keyCode: UInt16,
+        flags: CGEventFlags,
+        char: Character? = nil,
+        deadline: TimeInterval = .infinity,
+        postEvent: ((CGEvent) -> Void)? = nil
+    ) {
         let frontBundleID = NSWorkspace.shared.frontmostApplication?.bundleIdentifier
         if let previous = inputBundleID, previous != frontBundleID {
             rslog("input focus changed: reset buffers")
@@ -385,7 +401,7 @@ final class KeyboardMonitor: @unchecked Sendable {
             if let ch = char {
                 let isBackspace = ch == "\u{8}" || ch == "\u{7f}"
                 trackPossibleCorrectionRejection(isBackspace: isBackspace, isUndo: false)
-                handleForwardedChar(ch)
+                handleForwardedChar(ch, deadline: deadline, postEvent: postEvent)
             }
             return
         }
@@ -398,18 +414,23 @@ final class KeyboardMonitor: @unchecked Sendable {
 
         // Пробел — единственная граница через которую можно вернуться
         if keyCode == KC.space {
-            if currentWordLength > 0 {
+            guard flags.intersection([.maskCommand, .maskControl, .maskAlternate]).isEmpty else {
+                fullReset()
+                return
+            }
+            let hasWord = currentWordLength > 0
+            if hasWord {
                 wordBeforeBoundaryLength = currentWordLength
                 boundaryCount = 1
                 prevWordKeys = currentWordKeys
                 prevWordBundleID = NSWorkspace.shared.frontmostApplication?.bundleIdentifier
-                fireWordBoundary()
             } else {
                 boundaryCount += 1
             }
             currentWordLength = 0
             currentWordKeys = []
             if !lineKeys.isEmpty { lineKeys.append(TypedKey(keyCode: KC.space, shift: false, caps: false, char: " ")) }  // #24: пробел в буфер строки (не ведущий)
+            if hasWord { fireWordBoundary(deadline: deadline, postEvent: postEvent) }
             return
         }
 
@@ -475,21 +496,26 @@ final class KeyboardMonitor: @unchecked Sendable {
     /// Обработка символа, проброшенного через удалённый стол (keyCode 0 + юникод).
     /// Работаем по самому символу: пробел — граница слова, backspace — откат,
     /// буква — кладём реальный символ в буфер (конверсия пойдёт по нему, см. convertKeys).
-    private func handleForwardedChar(_ ch: Character) {
+    private func handleForwardedChar(
+        _ ch: Character,
+        deadline: TimeInterval,
+        postEvent: ((CGEvent) -> Void)?
+    ) {
         // Пробел — граница слова (как локальный keyCode space)
         if ch == " " {
-            if currentWordLength > 0 {
+            let hasWord = currentWordLength > 0
+            if hasWord {
                 wordBeforeBoundaryLength = currentWordLength
                 boundaryCount = 1
                 prevWordKeys = currentWordKeys
                 prevWordBundleID = NSWorkspace.shared.frontmostApplication?.bundleIdentifier
-                fireWordBoundary()
             } else {
                 boundaryCount += 1
             }
             currentWordLength = 0
             currentWordKeys = []
             if !lineKeys.isEmpty { lineKeys.append(TypedKey(keyCode: KC.space, shift: false, caps: false, char: " ")) }  // #24
+            if hasWord { fireWordBoundary(deadline: deadline, postEvent: postEvent) }
             return
         }
         // Перенос строки / таб — полный сброс
@@ -845,29 +871,35 @@ private func keyboardCallback(
     if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
         if let userInfo {
             let monitor = Unmanaged<KeyboardMonitor>.fromOpaque(userInfo).takeUnretainedValue()
+            // Events can be missed while a tap is disabled. Neither a partial
+            // word nor held modifier state is safe to reuse after resuming.
+            monitor.suspendForProtectedInput()
+            rslog("Event tap interrupted; input state reset")
             if let tap = monitor.eventTap {
                 CGEvent.tapEnable(tap: tap, enable: true)
             }
         }
-        return Unmanaged.passRetained(event)
+        return Unmanaged.passUnretained(event)
     }
 
     // Игнорируем собственные симулированные события по маркеру
     if event.getIntegerValueField(.eventSourceUserData) == kLocalSwitcherEventMarker {
-        return Unmanaged.passRetained(event)
+        return Unmanaged.passUnretained(event)
     }
 
     guard let userInfo else {
-        return Unmanaged.passRetained(event)
+        return Unmanaged.passUnretained(event)
     }
 
     let monitor = Unmanaged<KeyboardMonitor>.fromOpaque(userInfo).takeUnretainedValue()
+
+    let deadline = ProcessInfo.processInfo.systemUptime + 0.1
 
     // Gate before extracting key codes or Unicode, including fields where the
     // application exposes AXSecureTextField without enabling Secure Input.
     if PasswordFocus.active {
         monitor.suspendForProtectedInput()
-        return Unmanaged.passRetained(event)
+        return Unmanaged.passUnretained(event)
     }
 
     if type == .keyDown {
@@ -876,7 +908,7 @@ private func keyboardCallback(
         // Удалёнка: игнорируем авто-повтор клавиш — латентность Screen Sharing рождает
         // ложные повторы (тот самый «фффффф»), засоряющие буфер конверсии.
         if event.getIntegerValueField(.keyboardEventAutorepeat) != 0, remote {
-            return Unmanaged.passRetained(event)
+            return Unmanaged.passUnretained(event)
         }
         // Удалёнка: Screen Sharing пробрасывает символы как keyCode 0 + юникод-payload.
         // Читаем сам символ — без него буфер забивается keyCode 0 (= один символ → «фффффф»).
@@ -894,7 +926,11 @@ private func keyboardCallback(
                 }
             }
         }
-        monitor.handleKeyDown(keyCode: keyCode, flags: event.flags, char: forwardedChar)
+        monitor.handleKeyDown(
+            keyCode: keyCode, flags: event.flags, char: forwardedChar,
+            deadline: deadline,
+            postEvent: { $0.tapPostEvent(proxy) }
+        )
     } else if type == .flagsChanged {
         let keyCode = UInt16(event.getIntegerValueField(.keyboardEventKeycode))
         if monitor.handleFlagsChanged(flags: event.flags, keyCode: keyCode) {
@@ -904,5 +940,5 @@ private func keyboardCallback(
         monitor.resetBuffersOnClick()
     }
 
-    return Unmanaged.passRetained(event)
+    return Unmanaged.passUnretained(event)
 }
